@@ -67,7 +67,7 @@ flowchart TD
   E --> P["Path Builder<br/>Chains attack paths"]
   M --> P
   P --> F["Fix Prioritizer<br/>Ranks fixes · recommends only"]
-  F --> PDF["Lead builds PDF + attaches commands.log"]
+  F --> PDF["Lead builds PDF + sends commands.log alongside"]
   L -.->|relay outside group chat| IR["Incident Responder<br/>Outside chat · via Lead"]
   IR -.->|report: exact commands + outputs| L
 
@@ -98,7 +98,7 @@ flowchart TD
    - **Identity Mapper** — principals, keys, MFA, policies, and role trusts (including federation).
 4. **Path Builder** chains that evidence into attack paths (entry → foothold → escalation → impact), noting whether each path is live. It does not rank anything.
 5. **Fix Prioritizer** ranks fixes by risk and effort and gives the exact proposed commands. These are recommendations only.
-6. **The Lead builds the PDF** and attaches `commands.log`. Artifacts land under `/workspace/attack-paths/YYYY-MM-DD/` (see [Transparency](#transparency-rules)).
+6. **The Lead builds the PDF** and sends `commands.log` alongside it. Artifacts land under `/workspace/attack-paths/YYYY-MM-DD/` (see [Transparency](#transparency-rules)).
 7. **Incident Responder stays outside the 6-member group chat (via the Lead).** On active compromise the Lead alerts the owner immediately and relays a handoff to Incident Responder.
 
 ### What the daily PDF contains
@@ -141,7 +141,7 @@ Every AWS call in the room follows the same pattern:
 
 ### Attack Path Lead (red)
 
-Runs the daily routine, keeps the six-member group chat on the pipeline order, builds the PDF, attaches `commands.log`, alerts the owner on active compromise, and relays to Incident Responder outside the chat. Does not change AWS.
+Runs the daily routine, keeps the six-member group chat on the pipeline order, builds the PDF, sends `commands.log` alongside it, alerts the owner on active compromise, and relays to Incident Responder outside the chat. Does not change AWS.
 
 ### AWS Asset Inventory (blue)
 
@@ -153,7 +153,7 @@ Read-only. Finds reachable or near-public surfaces: security groups open to `0.0
 
 ### Identity Mapper (violet)
 
-Read-only. Maps users, roles, keys (age, last used), MFA, attached and inline policies, and role trusts, including federation audience gaps. Flags self-escalation paths (for example `iam:PutUserPolicy`, `IAMFullAccess`, `iam:PassRole`) and checks recent principal activity with CloudTrail `LookupEvents` (90-day history; CloudTrail returns 50 events per page; the connector auto-paginates (leave `MaxResults` unset, since setting it disables paging) up to 1,000 events per lookup, so busy principals that hit that cap are re-queried one day at a time). Writes `identity/identity-findings.md` and raw outputs under `identity/commands/`.
+Read-only. Maps users, roles, keys (age, last used), MFA, attached and inline policies, and role trusts, including federation audience gaps. Flags self-escalation paths (for example `iam:PutUserPolicy`, `IAMFullAccess`, `iam:PassRole`) and checks recent principal activity with CloudTrail `LookupEvents` (90-day history; CloudTrail returns 50 events per page and the connector auto-paginates up to 1,000 events per lookup, with `MaxResults` left unset because setting it disables paging; busy principals that hit that cap are re-queried one day at a time). Writes `identity/identity-findings.md` and raw outputs under `identity/commands/`.
 
 ### Path Builder (cyan arch)
 
@@ -176,7 +176,7 @@ Separate bot. Owns live AWS incidents, which arrive only as direct handoffs from
 
 ## Set it up in your own Grok Bot
 
-Do these steps **in order**.
+Do these steps **in order**. Prerequisites: a Grok Bot account and an AWS account where you can create an IAM user or role.
 
 ### 1. Import the Lead template first, then the other five
 
@@ -184,7 +184,7 @@ Import **Attack Path Lead** first, then the five specialists. Incident Responder
 
 | Order | Agent | What it does | Template |
 |------:|-------|--------------|----------|
-| 1 | Attack Path Lead | Runs the sweep, stitches paths, builds the PDF, relays incidents | [Import](https://x.ai/bot/tHtDUuOEcYXkO-D9FwBWz) |
+| 1 | Attack Path Lead | Runs the daily routine, keeps the pipeline order, builds the PDF, relays incidents | [Import](https://x.ai/bot/tHtDUuOEcYXkO-D9FwBWz) |
 | 2 | AWS Asset Inventory | Read-only inventory across all 17 regions; runs first each day | [Import](https://x.ai/bot/6NM_MszjwexFsGKsY4DIf) |
 | 3 | Exposure Finder | Public and near-public exposure | [Import](https://x.ai/bot/lRhLw_E1fuiDOOfzrVXZu) |
 | 4 | Identity Mapper | IAM users, roles, keys, trusts | [Import](https://x.ai/bot/zbBBmmX_6WMwN_TN5o0oB) |
@@ -235,7 +235,7 @@ Hand-build a bot (blue cloud avatar) for live AWS incidents. No public template 
 
 ### 6. Confirm the daily routine and time zone
 
-In the Lead’s chat, confirm a **daily** routine around **6:00 AM America/New_York (ET)**, flexible **±15 minutes**, **server-side** (runs with the computer off). Confirm weekends included unless you want them excluded.
+In the Lead’s chat, confirm a **daily** routine at **6:00 AM ET** (`CRON_TZ=America/Indianapolis 0 6 * * *`), flexible **±15 minutes**, **server-side** (runs with the computer off). Confirm weekends included unless you want them excluded.
 
 ### 7. Run a first review on demand
 
@@ -330,7 +330,7 @@ The PDF is under `report/` (name like `aws-attack-paths-YYYY-MM-DD.pdf`), with `
 ## Troubleshooting / FAQ
 
 **The daily run did not fire.**  
-Confirm the Lead’s routine is daily, time zone **America/New_York**, ~6:00 AM ±15 minutes, and **server-side**. Routines do not need your laptop on. Ask the Lead to show the next scheduled time, then run an on-demand review if you missed a day.
+Confirm the Lead’s routine is daily, schedule `CRON_TZ=America/Indianapolis 0 6 * * *` (6:00 AM ET), flexible ±15 minutes, and **server-side**. Routines do not need your laptop on. Ask the Lead to show the next scheduled time, then run an on-demand review if you missed a day.
 
 **A bot cannot call AWS.**  
 Check the AWS MCP connector is connected to the read-only IAM principal, that **ReadOnlyAccess** and **SecurityAudit** are attached, and that each bot’s getting-started answers point at that connector and account.
@@ -360,7 +360,6 @@ No. Do not commit `commands.log`, access keys, or unredacted PDFs. Only redacted
 
 - Read-only access cannot prove every write-path side effect; some paths are labeled as needing an admin step.
 - CloudTrail **LookupEvents** returns 50 events per page; the connector auto-paginates up to **1,000 per lookup** and history covers **90 days**; principals that hit the cap need day-by-day queries without `MaxResults`.
--
 - Disabled or missing trails limit attribution.
 - Incident Responder has **no public template** yet.
 - This repository never includes live `commands.log`, credentials, or unredacted account data.

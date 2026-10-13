@@ -6,7 +6,7 @@ flowchart TD
   E --> P["Path Builder<br/>Chains attack paths"]
   M --> P
   P --> F["Fix Prioritizer<br/>Ranks fixes · recommends only"]
-  F --> PDF["Lead builds PDF + attaches commands.log"]
+  F --> PDF["Lead builds PDF + sends commands.log alongside"]
   L -.->|relay outside group chat| IR["Incident Responder<br/>Outside chat · via Lead"]
   IR -.->|report: exact commands + outputs| L
 
