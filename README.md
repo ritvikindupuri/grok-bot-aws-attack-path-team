@@ -1,32 +1,34 @@
 # AWS Cloud Attack Path Team
 
-A team of seven Grok Bot agents that maps real attack paths in an AWS account every day, ranks what an attacker could do next, and proposes fixes — all read-only, with Ritvik approving every change.
+A team of Grok Bot agents that maps real attack paths in an AWS account every day, ranks what an attacker could do next, and proposes fixes — all read-only, with the owner approving every change.
 
 ## Project description
 
 An AWS account accumulates footholds: long-lived admin keys with no MFA, federation roles that trust the wrong audience, open security groups, public API stages, buckets that look private until a trust policy lets someone in. Checking that by hand means paging through IAM, CloudTrail, GuardDuty, S3, EC2, and API Gateway and then connecting the dots. Miss one link and the path stays live.
 
-This project splits that job across a small team of Grok Bot agents. One lead, the **Attack Path Lead**, runs the daily sweep, stitches specialist findings into ranked paths, and produces one PDF. Five specialists each cover one slice of the account (inventory, exposure, identity, path construction, fix ordering). A sixth agent, the **Incident Responder**, sits outside the group chat and takes active-compromise handoffs that the Lead relays. Everything runs through the AWS connector with **ReadOnlyAccess** and **SecurityAudit** only. Every command and its exact output is posted in the room and logged to `commands.log`.
+This project splits that job across Grok Bot agents. **Six agents share one group chat** (the platform’s 6-member cap): **Attack Path Lead**, **AWS Asset Inventory**, **Exposure Finder**, **Identity Mapper**, **Path Builder**, and **Fix Prioritizer**. A seventh agent, the **Incident Responder**, is a **separate bot outside that chat**; the Lead relays active-compromise handoffs to it. Incident Responder has **no public template yet**.
 
-The team never changes AWS. Ritvik approves every AWS change, every business-context call, every data copy, and every outside contact, and gets an immediate alert on active compromise.
+Everything runs through the AWS connector (`aws___run_script` / `call_boto3`) as an IAM principal with **ReadOnlyAccess** and **SecurityAudit** only. Fixes are recommendations only. The Lead builds a daily PDF; `commands.log` is attached. Live logs and inventory stay on the Grok Bot computer — this repo only ships a [redacted sample report](docs/sample-report.pdf).
 
 ## Key features
 
-- **Seven agents with clear roles.** A lead, five specialists on the daily path, and an Incident Responder for active compromise.
-- **One daily sweep at 6:00 AM ET.** Inventory runs first; Exposure Finder and Identity Mapper run in parallel; Path Builder and Fix Prioritizer follow; the Lead builds the PDF.
-- **Paths, not a pile of findings.** Specialists report evidence; Path Builder chains it into entry → foothold → escalation → impact; Fix Prioritizer orders remediations by risk and effort.
-- **Read-only by design.** The AWS connector uses ReadOnlyAccess + SecurityAudit. No agent attaches policies, opens ports, or deletes resources.
-- **Full command audit.** Every AWS call and its exact output is posted and appended to `commands.log`.
-- **You stay in control.** Ritvik approves every AWS change, business-context judgment call, data copying, and outside contact, and is alerted immediately on active compromise.
+- **Six agents in one group chat, plus Incident Responder outside.** The Lead orchestrates the room and relays incidents out of band.
+- **Daily routine ~6:00 AM ET (±15 minutes), every day, server-side.** It runs even if your local computer is off.
+- **Ordered pipeline.** Inventory (all 17 regions) first → Exposure Finder and Identity Mapper in parallel → Path Builder → Fix Prioritizer → Lead builds the PDF.
+- **Paths with diagrams and mappings.** Critical findings first, then executive summary, per-path diagrams (P0–P6, severity colors), ranked fixes with **CIS AWS Foundations v3.0** and **MITRE ATT&CK** mappings, incident findings, owner decisions, changes since the last run, and a verbatim command appendix.
+- **Full transparency.** Before each call: a short explanation. Then the exact command and its exact unchanged output. Then the team discusses it. Everything lands under `/workspace/attack-paths/YYYY-MM-DD/`.
+- **You stay in control.** The owner approves every AWS change, business-context question, data copy, and outside contact. Active compromise triggers an immediate alert.
 
 ## Safeguards
 
-- **Read-only AWS access.** Agents only call APIs allowed by ReadOnlyAccess and SecurityAudit. They never mutate the account.
-- **Human approval for anything that leaves the box.** Ritvik approves every AWS change (run by a human or a separate change process), every business-context call, every copy of account data off the box, and every contact outside the team.
-- **Immediate alert on active compromise.** Signs of an attacker operating now (deleted GuardDuty, stopped CloudTrail, unexpected admin key use) page Ritvik right away; they do not wait for the daily PDF.
-- **Secrets stay masked.** Access key IDs appear only as masked suffixes. Secret key material is never printed.
-- **Incident Responder stays out of the group chat.** The Lead relays handoffs so day-to-day path work and active response do not mix.
-- **No real account data in this repo.** The sample report is redacted. `commands.log` and live inventory stay on the Grok Bot computer.
+- **Read-only AWS access.** Agents call AWS only through the connector (`aws___run_script` / `call_boto3`) as an IAM user (or role) with **ReadOnlyAccess** + **SecurityAudit**. They never mutate the account from the daily path.
+- **Fixes are recommendations only.** No specialist applies remediations. Incident Responder never changes AWS without owner approval.
+- **Approval claims are checked.** If an agent claims the owner approved something, that claim is verified against what the owner actually said — not taken on faith.
+- **Human in the loop.** The owner approves every AWS change, every business-context question (for example, whether a principal is a sanctioned red-team tool), every copy of account data off the box, and every contact outside the team. Active compromise → immediate alert.
+- **Suspicious data: metadata and listing only.** Objects that look like exfil staging get listing and metadata, never downloads of object bodies.
+- **Credentials: mask only.** The only allowed edit to command output is masking credentials, and those edits are marked as masked. Otherwise output is posted unchanged.
+- **Known connector limits.** `LookupEvents` caps at **1000 events per call**, so queries run **one day at a time**. The CloudTrail lookup window is **90 days**.
+- **No live secrets in this repo.** The sample PDF is redacted. `commands.log` and dated run folders are not published.
 
 ## Architecture
 
@@ -35,22 +37,22 @@ The team never changes AWS. Ritvik approves every AWS change, every business-con
 </p>
 <p align="center"><b>Figure 1. How the AWS attack path team works</b></p>
 
-Each agent has its own color matched to its role: Lead red, Inventory blue, Exposure Finder orange, Identity Mapper violet, Path Builder cyan, Fix Prioritizer green, Incident Responder yellow.
+Role colors: **Lead** red · **Inventory** blue · **Exposure Finder** orange · **Identity Mapper** violet · **Path Builder** cyan · **Fix Prioritizer** green · **Incident Responder** yellow.
 
 <details>
 <summary><b>Mermaid source for the same flow</b></summary>
 
 ```mermaid
 flowchart TD
-  R["Daily routine 6:00 AM ET"] --> L["Attack Path Lead"]
-  L --> I["AWS Asset Inventory"]
+  R["Daily routine ~6:00 AM ET ±15 min<br/>server-side"] --> L["Attack Path Lead"]
+  L --> I["AWS Asset Inventory<br/>all 17 regions"]
   I --> E["Exposure Finder"]
   I --> M["Identity Mapper"]
   E --> P["Path Builder"]
   M --> P
   P --> F["Fix Prioritizer"]
-  F --> PDF["Lead builds PDF report"]
-  L -.->|incident handoff outside group chat| IR["Incident Responder"]
+  F --> PDF["Lead builds PDF + attaches commands.log"]
+  L -.->|relay outside group chat| IR["Incident Responder<br/>no template yet"]
 
   classDef lead fill:#C62828,color:#fff,stroke:#8E0000
   classDef inv fill:#1565C0,color:#fff,stroke:#0D47A1
@@ -72,85 +74,157 @@ flowchart TD
 
 ### How it works, step by step
 
-1. **The daily routine fires at 6:00 AM ET.** The Attack Path Lead starts the sweep and posts the run plan in the team room.
-2. **AWS Asset Inventory runs first.** It takes a read-only picture of the account: IAM users and roles, compute, networking, S3, regional services, and which regions are in use. Downstream agents work from that inventory.
+1. **The daily routine starts around 6:00 AM ET (±15 minutes).** It is scheduled server-side, so it runs with the local computer off. The Attack Path Lead opens the run in the six-member group chat.
+2. **AWS Asset Inventory runs first across all 17 regions.** It builds the account picture (IAM, compute, network, S3, regional services) that everyone else reads.
 3. **Exposure Finder and Identity Mapper run in parallel.**
-   - **Exposure Finder** looks for what is reachable from outside: open security groups, public or mis-blocked buckets, public API Gateway stages, missing account-level controls.
-   - **Identity Mapper** looks at who can become whom: admin keys without MFA, key last-used data, role trust policies (including federation), over-permissioned inline and attached policies.
-4. **Path Builder chains the evidence.** It turns inventory + exposure + identity into ranked attack paths (entry → foothold → escalation → impact), each with severity and whether it is live or needs an extra admin step.
-5. **Fix Prioritizer orders the remediations.** Each path gets concrete fix proposals, ordered by risk reduction versus effort, still without applying any change.
-6. **The Lead builds the PDF.** One report for the day lands on the Grok Bot computer. A redacted sample is in this repo: [docs/sample-report.pdf](docs/sample-report.pdf).
-7. **Incident Responder gets handoffs outside the group chat.** When the Lead sees active compromise, it relays to the Incident Responder and alerts Ritvik immediately. Day-to-day path work stays in the team room.
+   - **Exposure Finder** — public and near-public surfaces (open security groups, public-access gaps, unauthenticated APIs, and similar).
+   - **Identity Mapper** — principals, keys, MFA, policies, and role trusts (including federation).
+4. **Path Builder** chains that evidence into ranked paths (entry → foothold → escalation → impact), with severity and whether the path is live.
+5. **Fix Prioritizer** orders remediations by risk and effort, with exact proposed commands — still recommendations only.
+6. **The Lead builds the PDF** and attaches `commands.log`. Artifacts land under `/workspace/attack-paths/YYYY-MM-DD/` (see [Transparency](#transparency-rules)).
+7. **Incident Responder stays outside the group chat.** On active compromise the Lead alerts the owner immediately and relays a handoff to Incident Responder.
+
+### What the daily PDF contains
+
+1. **Critical findings** at the top  
+2. **Executive summary**  
+3. **Per-path diagrams** (P0–P6) with severity colors  
+4. **Ranked fixes** mapped to **CIS AWS Foundations v3.0** and **MITRE ATT&CK**  
+5. **Incident findings**  
+6. **Decisions for the owner**  
+7. **Changes since the last run**  
+8. **Appendix** of verbatim commands (and **`commands.log` attached**)
+
+A redacted example: **[docs/sample-report.pdf](docs/sample-report.pdf)**.
+
+## Transparency rules
+
+Every AWS call in the room follows the same pattern:
+
+1. **Before the call** — a short explanation of what it will do and why.  
+2. **The call** — the exact command, with the **exact unchanged output** immediately below it.  
+3. **After the call** — the team discusses what the output means.  
+4. **Logging** — everything is written under dated folders:
+
+```text
+/workspace/attack-paths/YYYY-MM-DD/
+  inventory/
+  exposure/
+  identity/
+  paths/
+  fixes/
+  report/
+  commands.log
+```
+
+5. **The only allowed edit** to captured output is **masking credentials**, and those masks are **marked as masked**. No other rewriting of outputs.
 
 ## Specialist details
 
-### Attack Path Lead
+### Attack Path Lead (red)
 
-Coordinates the team, owns the daily routine, combines specialist output into one report, and is the only agent that talks to the Incident Responder about active compromise. It never changes AWS.
+Runs the daily routine, keeps the six-member group chat on the pipeline order, builds the PDF, attaches `commands.log`, alerts the owner on active compromise, and relays to Incident Responder outside the chat. Does not change AWS.
 
-### AWS Asset Inventory
+### AWS Asset Inventory (blue)
 
-Read-only. Enumerates IAM, EC2/VPC, S3, and regional control-plane services across the account. Produces the inventory the rest of the team reads. Logs every command and output.
+Read-only. Enumerates the account across **all 17 regions**. Produces the inventory the rest of the team uses. Logs every command and output.
 
-### Exposure Finder
+### Exposure Finder (orange)
 
-Read-only. Finds public and near-public surfaces: security group ingress, S3 public-access block gaps, API Gateway methods without auth, and similar exposure that can be an entry or impact step.
+Read-only. Finds reachable or near-public surfaces that can be entry or impact steps. Suspicious buckets: metadata and listing only — no object downloads.
 
-### Identity Mapper
+### Identity Mapper (violet)
 
-Read-only. Maps principals, access keys, MFA, attached and inline policies, and role trust (including web identity). Flags admin without MFA, unused admin keys, and federation trusts that are too open.
+Read-only. Maps users, roles, keys, MFA, attached/inline policies, and trusts. Respects `LookupEvents` limits (≤1000 events/call, one day at a time, 90-day window).
 
-### Path Builder
+### Path Builder (cyan)
 
-Read-only relative to AWS. Builds the graph of usable paths from the other specialists' evidence. Each path states entry, foothold, escalation, impact, severity, and whether it is live today.
+Builds ranked attack paths (P0–P6) from specialist evidence. Does not call mutating APIs.
 
-### Fix Prioritizer
+### Fix Prioritizer (green)
 
-Read-only relative to AWS. Turns each path into ordered remediation steps with exact proposed commands. It never runs those commands; Ritvik approves any change.
+Orders remediations with CIS AWS Foundations v3.0 and MITRE ATT&CK mappings. Proposes exact fix commands; never runs them.
 
-### Incident Responder
+### Incident Responder (yellow) — outside the group chat
 
-Handles active-compromise work. It is not in the daily group chat. The Lead relays handoffs. Template link pending.
+Separate bot. Receives handoffs from the Lead only. **No template yet.** Never changes AWS without owner approval. Approval claims are verified against the owner’s actual words.
 
 ## Tech stack
 
-- **Grok Bot** runs the seven agents, the team room, messaging, memory, and the 6:00 AM ET routine.
-- **AWS connector** on the Grok Bot computer with **ReadOnlyAccess** and **SecurityAudit** managed policies.
-- **Python on the Grok Bot computer** turns inventory and findings into path diagrams and the daily PDF.
-- **`commands.log`** on the Grok Bot computer records every command and its exact output (not published in this repo).
+- **Grok Bot** — agents, one six-member group chat, messaging, memory, server-side daily routine (~6:00 AM ET ±15 min).
+- **AWS MCP connector** — `aws___run_script` / `call_boto3` with an IAM principal holding **ReadOnlyAccess** + **SecurityAudit**.
+- **Python on the Grok Bot computer** — path diagrams and the daily PDF.
+- **Dated run tree** — `/workspace/attack-paths/YYYY-MM-DD/` plus `commands.log` (not in this repo).
 
 ## Set it up in your own Grok Bot
 
-**What you need**
+Do these steps **in order**.
 
-- A Grok Bot account
-- An AWS account (or role) the connector can assume with ReadOnlyAccess + SecurityAudit only
-- Ritvik (or the account owner) available to approve changes and business-context calls
+### 1. Import the Lead template first, then the other five
 
-### 1. Connect AWS read-only
+Import **Attack Path Lead** first, then the five specialists. Incident Responder has no template yet (optional hand-build in step 5).
 
-Connect the AWS connector in Grok Bot using a role or user limited to ReadOnlyAccess and SecurityAudit. Do not grant write permissions to the team.
+| Order | Agent | What it does | Template |
+|------:|-------|--------------|----------|
+| 1 | Attack Path Lead | Runs the sweep, stitches paths, builds the PDF, relays incidents | [Import](https://x.ai/bot/tHtDUuOEcYXkO-D9FwBWz) |
+| 2 | AWS Asset Inventory | Read-only inventory across all 17 regions; runs first each day | [Import](https://x.ai/bot/6NM_MszjwexFsGKsY4DIf) |
+| 3 | Exposure Finder | Public and near-public exposure | [Import](https://x.ai/bot/lRhLw_E1fuiDOOfzrVXZu) |
+| 4 | Identity Mapper | IAM users, roles, keys, trusts | [Import](https://x.ai/bot/zbBBmmX_6WMwN_TN5o0oB) |
+| 5 | Path Builder | Ranked attack paths (P0–P6) from specialist evidence | [Import](https://x.ai/bot/t-tM9nEjrZYjF0ZfDb8D3) |
+| 6 | Fix Prioritizer | Ranked remediations + CIS / ATT&CK mappings | [Import](https://x.ai/bot/Ti051Yd5qCLbZ6LhfX5Wa) |
+| — | Incident Responder | Outside the chat; Lead relays handoffs | *No template yet* |
 
-### 2. Import the agents
+### 2. Connect the AWS connector (AWS MCP) with a read-only IAM principal
 
-Each agent below (except Incident Responder) is a public Grok Bot template. Open the link and import it.
+Create an IAM user or role used only by Grok Bot. Attach **only** these AWS managed policies:
 
-| Agent | What it does | Template |
-|-------|--------------|----------|
-| Attack Path Lead | Team lead. Runs the 6 AM ET sweep, stitches paths, builds the PDF, relays incidents. | [Import](https://x.ai/bot/tHtDUuOEcYXkO-D9FwBWz) |
-| AWS Asset Inventory | Read-only account inventory; runs first each day. | [Import](https://x.ai/bot/6NM_MszjwexFsGKsY4DIf) |
-| Exposure Finder | Finds public and near-public AWS exposure. | [Import](https://x.ai/bot/lRhLw_E1fuiDOOfzrVXZu) |
-| Identity Mapper | Maps IAM users, roles, keys, and trusts. | [Import](https://x.ai/bot/zbBBmmX_6WMwN_TN5o0oB) |
-| Path Builder | Builds ranked attack paths from specialist evidence. | [Import](https://x.ai/bot/t-tM9nEjrZYjF0ZfDb8D3) |
-| Fix Prioritizer | Orders remediations by risk and effort; proposes exact fixes. | [Import](https://x.ai/bot/Ti051Yd5qCLbZ6LhfX5Wa) |
-| Incident Responder | Active-compromise response via Lead handoff (outside group chat). | *No template yet* |
+| Policy | ARN |
+|--------|-----|
+| ReadOnlyAccess | `arn:aws:iam::aws:policy/ReadOnlyAccess` |
+| SecurityAudit | `arn:aws:iam::aws:policy/SecurityAudit` |
 
-Import the six published templates before you continue. Create Incident Responder by hand when you need it, using yellow as its color.
+Connect that principal in Grok Bot as the **AWS MCP** / AWS connector. Do **not** grant write, IAM full access, or AdministratorAccess to this principal.
+
+Minimal identity policy sketch (prefer the two managed policies above):
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "UseManagedReadOnlyAndSecurityAudit",
+      "Effect": "Allow",
+      "Action": ["sts:GetCallerIdentity"],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+The real permissions come from attaching `ReadOnlyAccess` and `SecurityAudit` to the user or role. Issue access keys (or a role assumption path) only for that read-only principal, and store them in the connector — never in a group chat.
+
+### 3. Finish each bot’s getting-started conversation
+
+Open each imported bot once. Its getting-started flow asks for the **AWS account** and **regions** (inventory is built to cover all 17). Point every bot at the same read-only connector. Name the Attack Path Lead as lead for each specialist.
+
+### 4. Create the group chat with all six
+
+Create one group chat and add exactly these six: Attack Path Lead, AWS Asset Inventory, Exposure Finder, Identity Mapper, Path Builder, Fix Prioritizer. Do **not** put Incident Responder in that chat (6-member cap; IR stays separate so the Lead can relay).
+
+### 5. Optionally create Incident Responder
+
+Hand-build a yellow-coded bot for active compromise. No public template yet. Tell the Lead this bot’s name/handle so it can relay outside the group chat. Incident Responder must not change AWS without your approval.
+
+### 6. Confirm the daily routine and time zone
+
+In the Lead’s chat, confirm a **daily** routine around **6:00 AM America/New_York (ET)**, flexible **±15 minutes**, **server-side** (runs with the computer off). Confirm weekends included unless you want them excluded.
+
+### 7. Run a first review on demand
+
+Before relying on the schedule, ask the Lead for a first full review on demand (see [Usage](#how-to-use-it)). Check that dated folders appear under `/workspace/attack-paths/YYYY-MM-DD/`, that commands are explained then logged verbatim, and that the PDF matches the [contents list](#what-the-daily-pdf-contains).
 
 <details>
-<summary><b>Prefer to build the team by hand instead of importing?</b></summary>
-
-Create one Grok Bot agent for each role. Give each one its color so you can tell them apart.
+<summary><b>Hand-build colors and standing rules (if you skip templates)</b></summary>
 
 | Agent | Color |
 |-------|-------|
@@ -162,44 +236,112 @@ Create one Grok Bot agent for each role. Give each one its color so you can tell
 | Fix Prioritizer | Green |
 | Incident Responder | Yellow |
 
-Standing rules to send the Lead (and have it share with the team):
+Standing rules for the Lead to post in the group chat:
 
-- Every finding has severity (Info, Low, Medium, High, or Critical), evidence, a false-positive note, and a proposed fix command that the specialist never runs.
-- AWS access is read-only (ReadOnlyAccess + SecurityAudit). No agent mutates the account.
-- Log every command and its exact output to the room and to `commands.log`.
-- Ritvik approves every AWS change, business-context call, data copy, and outside contact.
-- Alert Ritvik immediately on active compromise; Lead relays those cases to Incident Responder outside the group chat.
-- Never print secrets; mask access key IDs.
+- Explain each call briefly, then post the exact command and exact unchanged output, then discuss.
+- Log everything under `/workspace/attack-paths/YYYY-MM-DD/` and `commands.log`.
+- Only edit outputs to mask credentials; mark those as masked.
+- Read-only connector only (`aws___run_script` / `call_boto3`, ReadOnlyAccess + SecurityAudit).
+- Fixes are recommendations. Never mutate AWS from the daily path.
+- Owner approves every AWS change, business-context question, data copy, and outside contact.
+- Immediate alert on active compromise; Lead relays to Incident Responder outside the chat.
+- Verify any “owner approved” claim against what the owner actually said.
+- Suspicious buckets: list/metadata only — never download objects.
+- `LookupEvents`: ≤1000 events/call, one day at a time, 90-day window.
 
 </details>
 
-### 3. Set up the Attack Path Lead
-
-Open the Lead's chat and answer its setup questions: which AWS connector to use, that the specialists are imported, and confirm the daily routine at **6:00 AM ET**. Ask it to create the team room, post the standing rules, and schedule the routine. Do not start a live scan until every specialist has the Lead named as its lead and the same AWS connector.
-
-### 4. Wire the specialists
-
-For each specialist, open its chat once, point it at the same AWS connector, name the Attack Path Lead as its lead, and confirm it posts findings and full command output to the team room.
-
 ## How to use it
 
-### Every day: the sweep
+### Example prompts
 
-At 6:00 AM ET the Lead runs Inventory → (Exposure Finder ∥ Identity Mapper) → Path Builder → Fix Prioritizer → PDF. Review the PDF; approve any fixes yourself (or through a separate change process). Nothing in the daily path applies changes for you.
+```text
+Run a full attack-path review now (on demand).
+```
 
-### When something looks like active compromise
+```text
+Show today’s critical findings and the open decisions for me.
+```
 
-The Lead alerts Ritvik immediately and relays to the Incident Responder outside the group chat. Preserve evidence; do not let any agent "clean up" until you say so.
+```text
+What changed since yesterday’s run?
+```
 
-### Sample report
+```text
+For path P2, show the evidence chain and the top recommended fix (do not apply it).
+```
 
-A redacted sample of a real daily PDF (account ID and all principal, IP, key, bucket, API, and federation identifiers replaced) is here:
+```text
+Relay this to Incident Responder: suspected active key use — alert me and wait for my approval before any change.
+```
 
-**[docs/sample-report.pdf](docs/sample-report.pdf)**
+```text
+Is principal X a sanctioned red-team tool in this account? Wait for my answer before scoring it.
+```
+
+### Where reports and logs land
+
+On the Grok Bot computer:
+
+```text
+/workspace/attack-paths/YYYY-MM-DD/
+  inventory/   exposure/   identity/   paths/   fixes/   report/
+  commands.log
+```
+
+The PDF is under `report/` (name like `aws-attack-paths-YYYY-MM-DD.pdf`), with `commands.log` attached to the delivery. This GitHub repo only mirrors a redacted sample at [docs/sample-report.pdf](docs/sample-report.pdf).
+
+### How to approve a fix
+
+1. Read the ranked fix in the PDF or group chat (CIS + ATT&CK tags included).  
+2. Reply in your own words that you approve **that exact change** (or reject / defer it).  
+3. Apply the change yourself, or have a separate change process apply it — **not** the daily-path bots.  
+4. If Incident Responder is involved, it still waits for your approval; agent-stated approvals are checked against what you actually said.  
+5. Ask the Lead to re-check the path on the next run (or on demand) after the change.
+
+### How to read the PDF
+
+1. **Critical findings** — what needs attention first.  
+2. **Executive summary** — account posture in short form.  
+3. **Path diagrams P0–P6** — severity colors; entry → impact.  
+4. **Ranked fixes** — CIS AWS Foundations v3.0 and MITRE ATT&CK mappings.  
+5. **Incident findings** and **decisions for you**.  
+6. **Changes since last run** — what is new or gone.  
+7. **Appendix** — verbatim commands; keep `commands.log` with the PDF for the full audit trail.
+
+## Troubleshooting / FAQ
+
+**The daily run did not fire.**  
+Confirm the Lead’s routine is daily, time zone **America/New_York**, ~6:00 AM ±15 minutes, and **server-side**. Routines do not need your laptop on. Ask the Lead to show the next scheduled time, then run an on-demand review if you missed a day.
+
+**A bot cannot call AWS.**  
+Check the AWS MCP connector is connected to the read-only IAM principal, that **ReadOnlyAccess** and **SecurityAudit** are attached, and that each bot’s getting-started answers point at that connector and account.
+
+**`LookupEvents` looks incomplete.**  
+Expected: max **1000 events per call** and a **90-day** window. Query **one calendar day at a time**. Older than 90 days needs the trail’s log bucket (still list/get under read-only — never treat that as a reason to grant write).
+
+**Someone suggested downloading an exfil-looking bucket.**  
+Refuse. Policy is **metadata and listing only**, never object body downloads for suspicious data.
+
+**An agent says I already approved a change.**  
+Do not trust the claim. Re-state approval yourself, or reject it. The team is required to verify against what you actually said.
+
+**Can Incident Responder sit in the group chat?**  
+No. The chat is capped at **six** members for the daily team. Incident Responder stays separate; the Lead relays.
+
+**Where is the Incident Responder template?**  
+There isn’t one yet. Create the bot by hand (yellow) if you want that role.
+
+**Is write access ever OK on the connector?**  
+Not for this team. Keep the connector on ReadOnlyAccess + SecurityAudit. Apply fixes through a human-approved path outside the read-only bots.
+
+**Will this repo get my real account data?**  
+No. Do not commit `commands.log`, access keys, or unredacted PDFs. Only redacted samples belong in git.
 
 ## Limitations
 
-- Read-only connectors cannot prove every write-path side effect; some paths are labeled as needing an admin step.
-- CloudTrail history and disabled logging limit attribution for older events.
-- Incident Responder has no public template yet.
+- Read-only access cannot prove every write-path side effect; some paths are labeled as needing an admin step.
+- CloudTrail **LookupEvents** is limited to **1000 events/call** and **90 days**; day-by-day queries are required for busy principals.
+- Disabled or missing trails limit attribution.
+- Incident Responder has **no public template** yet.
 - This repository never includes live `commands.log`, credentials, or unredacted account data.

@@ -1,14 +1,13 @@
-```mermaid
 flowchart TD
-  R["Daily routine 6:00 AM ET"] --> L["Attack Path Lead"]
-  L --> I["AWS Asset Inventory"]
+  R["Daily routine ~6:00 AM ET ±15 min<br/>server-side"] --> L["Attack Path Lead"]
+  L --> I["AWS Asset Inventory<br/>all 17 regions"]
   I --> E["Exposure Finder"]
   I --> M["Identity Mapper"]
   E --> P["Path Builder"]
   M --> P
   P --> F["Fix Prioritizer"]
-  F --> PDF["Lead builds PDF report"]
-  L -.->|incident handoff outside group chat| IR["Incident Responder"]
+  F --> PDF["Lead builds PDF + attaches commands.log"]
+  L -.->|relay outside group chat| IR["Incident Responder<br/>no template yet"]
 
   classDef lead fill:#C62828,color:#fff,stroke:#8E0000
   classDef inv fill:#1565C0,color:#fff,stroke:#0D47A1
@@ -24,4 +23,3 @@ flowchart TD
   class P path
   class F fix
   class IR ir
-```
