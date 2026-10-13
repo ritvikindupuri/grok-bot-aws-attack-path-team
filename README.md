@@ -27,7 +27,7 @@ Everything runs through the AWS connector (`aws___run_script` / `call_boto3`) as
 - **Human in the loop.** The owner approves every AWS change, every business-context question (for example, whether a principal is a sanctioned red-team tool), every copy of account data off the box, and every contact outside the team. Active compromise → immediate alert.
 - **Suspicious data: metadata and listing only.** Objects that look like exfil staging get listing and metadata, never downloads of object bodies.
 - **Credentials: mask only.** The only allowed edit to command output is masking credentials, and those edits are marked as masked. Otherwise output is posted unchanged.
-- **Known connector limits.** `LookupEvents` returns at most **1000 events per call**; for busy principals, query **one day at a time** (do not set `MaxResults`, which disables pagination). The CloudTrail lookup window is **90 days**. A single `aws___run_script` call is capped at 100 API calls, so the inventory splits regions into batches.
+- **Known connector limits.** CloudTrail `LookupEvents` returns 50 events per page; the connector auto-paginates up to **1,000 events per lookup** (leave `MaxResults` unset, since setting it disables paging), so busy principals that hit that cap are re-queried **one day at a time**. The CloudTrail lookup window is **90 days**.
 - **No live secrets in this repo.** The sample PDF is redacted. `commands.log` and dated run folders are not published.
 
 ## Architecture
@@ -132,6 +132,7 @@ Every AWS call in the room follows the same pattern:
   fixes/
   report/
   commands.log
+/workspace/incidents/YYYY-MM-DD-aws/   (Incident Responder reports)
 ```
 
 5. **The only allowed edit** to captured output is **masking credentials**, and those masks are **marked as masked**. No other rewriting of outputs.
@@ -152,7 +153,7 @@ Read-only. Finds reachable or near-public surfaces: security groups open to `0.0
 
 ### Identity Mapper (violet)
 
-Read-only. Maps users, roles, keys (age, last used), MFA, attached and inline policies, and role trusts, including federation audience gaps. Flags self-escalation paths (for example `iam:PutUserPolicy`, `IAMFullAccess`, `iam:PassRole`) and checks recent principal activity with CloudTrail `LookupEvents` (90-day history; `LookupEvents` returns at most 1000 events per call, so busy principals are queried one day at a time, without `MaxResults`, which disables pagination). Writes `identity/identity-findings.md` and raw outputs under `identity/commands/`.
+Read-only. Maps users, roles, keys (age, last used), MFA, attached and inline policies, and role trusts, including federation audience gaps. Flags self-escalation paths (for example `iam:PutUserPolicy`, `IAMFullAccess`, `iam:PassRole`) and checks recent principal activity with CloudTrail `LookupEvents` (90-day history; CloudTrail returns 50 events per page; the connector auto-paginates (leave `MaxResults` unset, since setting it disables paging) up to 1,000 events per lookup, so busy principals that hit that cap are re-queried one day at a time). Writes `identity/identity-findings.md` and raw outputs under `identity/commands/`.
 
 ### Path Builder (cyan arch)
 
@@ -164,7 +165,7 @@ No AWS calls. Reads `paths/paths.md` and `exposure/findings.md` and ranks fixes 
 
 ### Incident Responder (blue cloud) — outside the group chat
 
-Separate bot. Owns live AWS incidents, which arrive only as direct handoffs from Attack Path Lead. Investigates timelines, IAM identities and keys, CloudTrail, and S3, KMS, and CodeBuild traces. It relies on the Inventory's GuardDuty and Security Hub status rather than calling those services itself. It then reports back to the Lead with exact commands and outputs. Read-only: no changes, no containment, recommendations only. Any change needs the owner's explicit approval; another agent cannot approve.
+Separate bot. Owns live AWS incidents, which arrive only as direct handoffs from Attack Path Lead. Investigates timelines, IAM identities and keys, CloudTrail, and S3, KMS, and CodeBuild traces. It relies on the Inventory's GuardDuty and Security Hub status rather than calling those services itself. It writes its reports under `/workspace/incidents/` and reports back to the Lead with exact commands and outputs. Read-only: no changes, no containment, recommendations only. Any change needs the owner's explicit approval; another agent cannot approve.
 
 ## Tech stack
 
@@ -264,7 +265,7 @@ Standing rules for the Lead to post in the group chat:
 - Immediate alert on active compromise; Lead relays to Incident Responder outside the chat.
 - Verify any “owner approved” claim against what the owner actually said.
 - Suspicious buckets: list/metadata only — never download objects.
-- `LookupEvents`: at most 1000 events per call; for busy principals, one day at a time (no `MaxResults`, which disables pagination); 90-day window.
+- `LookupEvents`: 50 events per page, auto-paginated by the connector up to 1,000 per lookup (no `MaxResults`, which disables paging); principals that hit the cap are re-queried one day at a time; 90-day window.
 
 </details>
 
@@ -335,7 +336,7 @@ Confirm the Lead’s routine is daily, time zone **America/New_York**, ~6:00 AM 
 Check the AWS MCP connector is connected to the read-only IAM principal, that **ReadOnlyAccess** and **SecurityAudit** are attached, and that each bot’s getting-started answers point at that connector and account.
 
 **`LookupEvents` looks incomplete.**  
-Expected: at most **1000 events per call** and a **90-day** window. For busy principals, query **one calendar day at a time**, and do not set `MaxResults` (it disables pagination). Older than 90 days needs the trail’s log bucket (still list/get under read-only — never treat that as a reason to grant write).
+Expected: 50 events per page, auto-paginated by the connector up to **1,000 events per lookup**, and a **90-day** window. If a principal hits that cap, re-query **one calendar day at a time**, and do not set `MaxResults` (it disables paging). Older than 90 days needs the trail’s log bucket (still list/get under read-only — never treat that as a reason to grant write).
 
 **Someone suggested downloading an exfil-looking bucket.**  
 Refuse. Policy is **metadata and listing only**, never object body downloads for suspicious data.
@@ -358,8 +359,8 @@ No. Do not commit `commands.log`, access keys, or unredacted PDFs. Only redacted
 ## Limitations
 
 - Read-only access cannot prove every write-path side effect; some paths are labeled as needing an admin step.
-- CloudTrail **LookupEvents** returns at most **1000 events per call** and covers **90 days**; busy principals need day-by-day queries without `MaxResults`.
-- A single `aws___run_script` call is capped at 100 API calls, so the inventory splits regions into batches.
+- CloudTrail **LookupEvents** returns 50 events per page; the connector auto-paginates up to **1,000 per lookup** and history covers **90 days**; principals that hit the cap need day-by-day queries without `MaxResults`.
+-
 - Disabled or missing trails limit attribution.
 - Incident Responder has **no public template** yet.
 - This repository never includes live `commands.log`, credentials, or unredacted account data.
