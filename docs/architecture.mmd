@@ -8,6 +8,7 @@ flowchart TD
   P --> F["Fix Prioritizer<br/>Ranks fixes · recommends only"]
   F --> PDF["Lead builds PDF + attaches commands.log"]
   L -.->|relay outside group chat| IR["Incident Responder<br/>Outside chat · via Lead"]
+  IR -.->|report: exact commands + outputs| L
 
   classDef lead fill:#C62828,color:#fff,stroke:#8E0000
   classDef inv fill:#1565C0,color:#fff,stroke:#0D47A1

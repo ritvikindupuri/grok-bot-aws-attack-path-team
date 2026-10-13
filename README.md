@@ -15,14 +15,14 @@ Everything runs through the AWS connector (`aws___run_script` / `call_boto3`) as
 - **Six agents in one group chat, plus Incident Responder outside.** The Lead orchestrates the room and relays incidents out of band.
 - **Daily routine ~6:00 AM ET (±15 minutes), every day, server-side.** It runs even if your local computer is off.
 - **Ordered pipeline.** Inventory (all 17 regions) first → Exposure Finder and Identity Mapper in parallel → Path Builder → Fix Prioritizer → Lead builds the PDF.
-- **Paths with diagrams and mappings.** Critical findings first, then executive summary, per-path diagrams (P0–P6, severity colors), ranked fixes with **CIS AWS Foundations v3.0** and **MITRE ATT&CK** mappings, incident findings, owner decisions, changes since the last run, and a verbatim command appendix.
+- **Paths with diagrams.** Critical findings first, then executive summary, per-path diagrams (P0–P6, severity colors), ranked fixes, incident findings, owner decisions, changes since the last run, and a verbatim command appendix.
 - **Full transparency.** Before each call: a short explanation. Then the exact command and its exact unchanged output. Then the team discusses it. Everything lands under `/workspace/attack-paths/YYYY-MM-DD/`.
 - **You stay in control.** The owner approves every AWS change, business-context question, data copy, and outside contact. Active compromise triggers an immediate alert.
 
 ## Safeguards
 
 - **Read-only AWS access.** Agents call AWS only through the connector (`aws___run_script` / `call_boto3`) as an IAM user (or role) with **ReadOnlyAccess** + **SecurityAudit**. They never mutate the account from the daily path.
-- **Fixes are recommendations only.** No specialist applies remediations. Incident Responder never changes AWS without owner approval.
+- **Fixes are recommendations only.** No specialist applies remediations. Incident Responder is read-only and runs no containment; any change needs the owner's explicit approval (no agent can approve).
 - **Approval claims are checked.** If an agent claims the owner approved something, that claim is verified against what the owner actually said — not taken on faith.
 - **Human in the loop.** The owner approves every AWS change, every business-context question (for example, whether a principal is a sanctioned red-team tool), every copy of account data off the box, and every contact outside the team. Active compromise → immediate alert.
 - **Suspicious data: metadata and listing only.** Objects that look like exfil staging get listing and metadata, never downloads of object bodies.
@@ -67,6 +67,7 @@ flowchart TD
   P --> F["Fix Prioritizer<br/>Ranks fixes · recommends only"]
   F --> PDF["Lead builds PDF + attaches commands.log"]
   L -.->|relay outside group chat| IR["Incident Responder<br/>Outside chat · via Lead"]
+  IR -.->|report: exact commands + outputs| L
 
   classDef lead fill:#C62828,color:#fff,stroke:#8E0000
   classDef inv fill:#1565C0,color:#fff,stroke:#0D47A1
@@ -103,7 +104,7 @@ flowchart TD
 1. **Critical findings** at the top  
 2. **Executive summary**  
 3. **Per-path diagrams** (P0–P6) with severity colors  
-4. **Ranked fixes** mapped to **CIS AWS Foundations v3.0** and **MITRE ATT&CK**  
+4. **Ranked fixes** (live paths cut × impact ÷ effort)  
 5. **Incident findings**  
 6. **Decisions for the owner**  
 7. **Changes since the last run**  
@@ -145,23 +146,23 @@ Read-only. Enumerates the account across **all 17 regions**. Produces the invent
 
 ### Exposure Finder (orange)
 
-Read-only. Finds reachable or near-public surfaces that can be entry or impact steps. Suspicious buckets: metadata and listing only — no object downloads.
+Read-only. Finds reachable or near-public surfaces: security groups open to `0.0.0.0/0`, S3 public access and account-level Block Public Access gaps, unauthenticated API Gateway or Lambda endpoints, and public or shared snapshots and AMIs. Writes `exposure/findings.md`. Suspicious buckets: metadata and listing only, no object downloads.
 
 ### Identity Mapper (violet)
 
-Read-only. Maps users, roles, keys, MFA, attached/inline policies, and trusts. Respects `LookupEvents` limits (≤1000 events/call, one day at a time, 90-day window).
+Read-only. Maps users, roles, keys (age, last used), MFA, attached and inline policies, and role trusts, including federation audience gaps. Flags self-escalation paths (for example `iam:PutUserPolicy`, `IAMFullAccess`, `iam:PassRole`) and checks recent principal activity with CloudTrail `LookupEvents` (90-day history; the connector caps a lookup at 1,000 events, so busy principals are split into one-day windows). Writes `identity/identity-findings.md` and raw outputs under `identity/commands/`.
 
 ### Path Builder (cyan arch)
 
-Chains attack paths (P0–P6) from specialist evidence. It does not rank them; Fix Prioritizer ranks the fixes. It does not call mutating APIs.
+No AWS calls. Chains Inventory, Exposure Finder, and Identity Mapper evidence into attack paths (P0–P6: entry, foothold, escalation, impact), marks each one live or unconfirmed, and lists the choke points for Fix Prioritizer. It does not rank; Fix Prioritizer ranks the fixes. Writes `paths/paths.md`.
 
 ### Fix Prioritizer (green leaf)
 
-Ranks fixes, mapped to CIS AWS Foundations v3.0 and MITRE ATT&CK mappings. Proposes exact fix commands; never runs them.
+No AWS calls. Reads `paths/paths.md` and `exposure/findings.md` and ranks fixes by (live paths cut × impact) ÷ effort, putting unconfirmed P0 items first. Writes `fixes/ranked-fixes.md` and logs each command and its output to `fixes/commands.log`. Fixes are recommendations only; the owner approves every change, and it never runs them.
 
 ### Incident Responder (blue cloud) — outside the group chat
 
-Separate bot. Receives handoffs from the Lead only. **No template yet.** Never changes AWS without owner approval. Approval claims are verified against the owner’s actual words.
+Separate bot. Owns live AWS incidents, which arrive only as direct handoffs from Attack Path Lead. Investigates timelines, identities and keys, CloudTrail, and S3, KMS, and CodeBuild traces, then reports back to the Lead with exact commands and outputs. Read-only: no changes, no containment, recommendations only. Any change needs the owner's explicit approval; another agent cannot approve.
 
 ## Tech stack
 
@@ -185,7 +186,7 @@ Import **Attack Path Lead** first, then the five specialists. Incident Responder
 | 3 | Exposure Finder | Public and near-public exposure | [Import](https://x.ai/bot/lRhLw_E1fuiDOOfzrVXZu) |
 | 4 | Identity Mapper | IAM users, roles, keys, trusts | [Import](https://x.ai/bot/zbBBmmX_6WMwN_TN5o0oB) |
 | 5 | Path Builder | Chains attack paths (P0–P6) from specialist evidence | [Import](https://x.ai/bot/t-tM9nEjrZYjF0ZfDb8D3) |
-| 6 | Fix Prioritizer | Ranks fixes · recommends only (CIS / ATT&CK mappings) | [Import](https://x.ai/bot/Ti051Yd5qCLbZ6LhfX5Wa) |
+| 6 | Fix Prioritizer | Ranks fixes · recommends only | [Import](https://x.ai/bot/Ti051Yd5qCLbZ6LhfX5Wa) |
 | — | Incident Responder | Outside chat · via Lead | *No template yet* |
 
 ### 2. Connect the AWS connector (AWS MCP) with a read-only IAM principal
@@ -227,7 +228,7 @@ Create one group chat and add exactly these six: Attack Path Lead, AWS Asset Inv
 
 ### 5. Optionally create Incident Responder
 
-Hand-build a bot (blue cloud avatar) for active compromise. No public template yet. Tell the Lead this bot’s name/handle so it can relay outside the group chat. Incident Responder must not change AWS without your approval.
+Hand-build a bot (blue cloud avatar) for live AWS incidents. No public template yet. Tell the Lead this bot’s name/handle so it can relay outside the group chat. It is read-only and recommends only; you must explicitly approve any change.
 
 ### 6. Confirm the daily routine and time zone
 
@@ -307,10 +308,10 @@ The PDF is under `report/` (name like `aws-attack-paths-YYYY-MM-DD.pdf`), with `
 
 ### How to approve a fix
 
-1. Read the ranked fix in the PDF or group chat (CIS + ATT&CK tags included).  
+1. Read the ranked fix in the PDF or group chat.  
 2. Reply in your own words that you approve **that exact change** (or reject / defer it).  
 3. Apply the change yourself, or have a separate change process apply it — **not** the daily-path bots.  
-4. If Incident Responder is involved, it still waits for your approval; agent-stated approvals are checked against what you actually said.  
+4. Incident Responder only recommends. Containment or changes need your explicit approval; another agent cannot approve, and agent-stated approvals are checked against what you actually said.  
 5. Ask the Lead to re-check the path on the next run (or on demand) after the change.
 
 ### How to read the PDF
@@ -318,7 +319,7 @@ The PDF is under `report/` (name like `aws-attack-paths-YYYY-MM-DD.pdf`), with `
 1. **Critical findings** — what needs attention first.  
 2. **Executive summary** — account posture in short form.  
 3. **Path diagrams P0–P6** — severity colors; entry → impact.  
-4. **Ranked fixes** — CIS AWS Foundations v3.0 and MITRE ATT&CK mappings.  
+4. **Ranked fixes** — ordered by live paths cut × impact ÷ effort.  
 5. **Incident findings** and **decisions for you**.  
 6. **Changes since last run** — what is new or gone.  
 7. **Appendix** — verbatim commands; keep `commands.log` with the PDF for the full audit trail.
