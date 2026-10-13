@@ -6,7 +6,7 @@ A team of Grok Bot agents that maps real attack paths in an AWS account every da
 
 An AWS account accumulates footholds: long-lived admin keys with no MFA, federation roles that trust the wrong audience, open security groups, public API stages, buckets that look private until a trust policy lets someone in. Checking that by hand means paging through IAM, CloudTrail, GuardDuty, Security Hub, S3, EC2, Lambda, API Gateway, RDS, and KMS and then connecting the dots. Miss one link and the path stays live.
 
-This project splits that job across Grok Bot agents. **Six agents share one group chat** (the platform’s 6-member cap): **Attack Path Lead**, **AWS Asset Inventory**, **Exposure Finder**, **Identity Mapper**, **Path Builder**, and **Fix Prioritizer**. A seventh agent, the **Incident Responder**, is a **separate bot outside that chat**; the Lead relays active-compromise handoffs to it. Incident Responder has **no public template yet**.
+This project splits that job across Grok Bot agents. **Six agents share one group chat** (the platform’s 6-member cap): **Attack Path Lead**, **AWS Asset Inventory**, **Exposure Finder**, **Identity Mapper**, **Path Builder**, and **Fix Prioritizer**. A seventh agent, the **Incident Responder**, is a **separate bot outside that chat**; the Lead relays active-compromise handoffs to it. Incident Responder has its own template (see setup).
 
 Everything runs through the AWS connector (`aws___run_script` / `call_boto3`) as an IAM principal with **ReadOnlyAccess** and **SecurityAudit** only. Fixes are recommendations only. The Lead builds a daily PDF; `commands.log` is sent alongside the PDF. Live logs and inventory stay on the Grok Bot computer — this repo only ships a [redacted sample report](docs/sample-report.pdf).
 
@@ -180,7 +180,7 @@ Do these steps **in order**. Prerequisites: a Grok Bot account and an AWS accoun
 
 ### 1. Import the Lead template first, then the other five
 
-Import **Attack Path Lead** first, then the five specialists. Incident Responder has no template yet (optional hand-build in step 5).
+Import **Attack Path Lead** first, then the five specialists. Import Incident Responder last (step 5); it stays out of the group chat.
 
 | Order | Agent | What it does | Template |
 |------:|-------|--------------|----------|
@@ -190,7 +190,7 @@ Import **Attack Path Lead** first, then the five specialists. Incident Responder
 | 4 | Identity Mapper | IAM users, roles, keys, trusts | [Import](https://x.ai/bot/zbBBmmX_6WMwN_TN5o0oB) |
 | 5 | Path Builder | Chains attack paths (P0–P6) from specialist evidence | [Import](https://x.ai/bot/t-tM9nEjrZYjF0ZfDb8D3) |
 | 6 | Fix Prioritizer | Ranks fixes · recommends only | [Import](https://x.ai/bot/Ti051Yd5qCLbZ6LhfX5Wa) |
-| — | Incident Responder | Outside chat · via Lead | *No template yet* |
+| 7 | Incident Responder | Live AWS incidents · outside chat, via Lead · read-only | [Import](https://x.ai/bot/HqoUmkecMwDuZCCaysgu-) |
 
 ### 2. Connect the AWS connector (AWS MCP) with a read-only IAM principal
 
@@ -229,9 +229,13 @@ Open each imported bot once. Its getting-started flow asks for the **AWS account
 
 Create one group chat and add exactly these six: Attack Path Lead, AWS Asset Inventory, Exposure Finder, Identity Mapper, Path Builder, Fix Prioritizer. Do **not** put Incident Responder in that chat (6-member cap; IR stays separate so the Lead can relay).
 
-### 5. Optionally create Incident Responder
+### 5. Import Incident Responder (outside the group chat)
 
-Hand-build a bot (blue cloud avatar) for live AWS incidents. No public template yet. Tell the Lead this bot’s name/handle so it can relay outside the group chat. It is read-only and recommends only; you must explicitly approve any change.
+1. Import [Incident Responder](https://x.ai/bot/HqoUmkecMwDuZCCaysgu-) and finish its getting-started conversation with the same read-only AWS connector.
+2. **Do not add it to the group chat.** The chat is capped at six members.
+3. Tell the Lead, in your 1:1 chat with it, that this is its Incident Responder, so the Lead can message it directly.
+4. How it works: on active compromise the Lead alerts you immediately, sends Incident Responder a handoff, and relays its findings (exact commands and outputs) back to the team. You can also message Incident Responder directly.
+5. It is read-only and recommends only. Any containment or AWS change needs your explicit approval.
 
 ### 6. Confirm the daily routine and time zone
 
@@ -348,7 +352,7 @@ Do not trust the claim. Re-state approval yourself, or reject it. The team is re
 No. The chat is capped at **six** members for the daily team. Incident Responder stays separate; the Lead relays.
 
 **Where is the Incident Responder template?**  
-There isn’t one yet. Create the bot by hand (blue cloud avatar) if you want that role.
+[Import it here](https://x.ai/bot/HqoUmkecMwDuZCCaysgu-). Setup step 5 shows how to connect it to the Lead without adding it to the group chat.
 
 **Is write access ever OK on the connector?**  
 Not for this team. Keep the connector on ReadOnlyAccess + SecurityAudit. Apply fixes through a human-approved path outside the read-only bots.
@@ -361,5 +365,4 @@ No. Do not commit `commands.log`, access keys, or unredacted PDFs. Only redacted
 - Read-only access cannot prove every write-path side effect; some paths are labeled as needing an admin step.
 - CloudTrail **LookupEvents** returns 50 events per page; the connector auto-paginates up to **1,000 per lookup** and history covers **90 days**; principals that hit the cap need day-by-day queries without `MaxResults`.
 - Disabled or missing trails limit attribution.
-- Incident Responder has **no public template** yet.
 - This repository never includes live `commands.log`, credentials, or unredacted account data.
