@@ -43,7 +43,7 @@ What the figure shows:
 
 - **Top:** the daily routine (~6 AM ET ±15 min) and You (Ritvik, owner) both feed into the Attack Path Lead.
 - **Group chat · 6 members:** Attack Path Lead → AWS Asset Inventory (*Reads first · 17 regions*) → Exposure Finder (*Public exposure*) ∥ Identity Mapper (*Users, roles, keys*) → Path Builder (*Chains attack paths*) → Fix Prioritizer (*Ranks fixes · recommends only*).
-- **Outside the chat:** Incident Responder (*Outside chat · via Lead*), reached only through a dashed relay from the Lead.
+- **Outside the chat:** Incident Responder (*Outside chat · via Lead*), reached only through a dashed relay from the Lead, and reports back to the Lead with exact commands and outputs (dashed return arrow).
 - **Output:** the Lead sends the PDF + `commands.log` to You (owner).
 - **AWS panels (official AWS Architecture Icons), every arrow marked with a blue *read-only* pill, and no write arrows:**
   - **AWS account**
