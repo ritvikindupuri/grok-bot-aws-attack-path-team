@@ -1,0 +1,5 @@
+commands.log
+*.pem
+.env
+**/credentials*
+__pycache__/
