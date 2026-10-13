@@ -3,11 +3,11 @@ flowchart TD
   L --> I["AWS Asset Inventory<br/>all 17 regions"]
   I --> E["Exposure Finder"]
   I --> M["Identity Mapper"]
-  E --> P["Path Builder"]
+  E --> P["Path Builder<br/>Chains attack paths"]
   M --> P
-  P --> F["Fix Prioritizer"]
+  P --> F["Fix Prioritizer<br/>Ranks fixes · recommends only"]
   F --> PDF["Lead builds PDF + attaches commands.log"]
-  L -.->|relay outside group chat| IR["Incident Responder<br/>no template yet"]
+  L -.->|relay outside group chat| IR["Incident Responder<br/>Outside chat · via Lead"]
 
   classDef lead fill:#C62828,color:#fff,stroke:#8E0000
   classDef inv fill:#1565C0,color:#fff,stroke:#0D47A1
@@ -15,7 +15,7 @@ flowchart TD
   classDef idm fill:#6A1B9A,color:#fff,stroke:#4A148C
   classDef path fill:#00838F,color:#fff,stroke:#006064
   classDef fix fill:#2E7D32,color:#fff,stroke:#1B5E20
-  classDef ir fill:#F9A825,color:#212121,stroke:#F57F17
+  classDef ir fill:#1084FE,color:#fff,stroke:#0D47A1
   class L,PDF lead
   class I inv
   class E exp

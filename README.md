@@ -1,6 +1,6 @@
 # AWS Cloud Attack Path Team
 
-A team of Grok Bot agents that maps real attack paths in an AWS account every day, ranks what an attacker could do next, and proposes fixes — all read-only, with the owner approving every change.
+A team of Grok Bot agents that maps real attack paths in an AWS account every day, chains how an attacker could move, and ranks recommended fixes — all read-only, with the owner approving every change.
 
 ## Project description
 
@@ -37,7 +37,21 @@ Everything runs through the AWS connector (`aws___run_script` / `call_boto3`) as
 </p>
 <p align="center"><b>Figure 1. How the AWS attack path team works</b></p>
 
-Role colors: **Lead** red · **Inventory** blue · **Exposure Finder** orange · **Identity Mapper** violet · **Path Builder** cyan · **Fix Prioritizer** green · **Incident Responder** yellow.
+Each agent appears with its real Grok Bot avatar: **Attack Path Lead** red shield, **AWS Asset Inventory** blue tablet, **Exposure Finder** orange wedge, **Identity Mapper** violet hexagon, **Path Builder** cyan arch, **Fix Prioritizer** green leaf, **Incident Responder** blue cloud.
+
+What the figure shows:
+
+- **Top:** the daily routine (~6 AM ET ±15 min) and You (Ritvik, owner) both feed into the Attack Path Lead.
+- **Group chat · 6 members:** Attack Path Lead → AWS Asset Inventory (*Reads first · 17 regions*) → Exposure Finder (*Public exposure*) ∥ Identity Mapper (*Users, roles, keys*) → Path Builder (*Chains attack paths*) → Fix Prioritizer (*Ranks fixes · recommends only*).
+- **Outside the chat:** Incident Responder (*Outside chat · via Lead*), reached only through a dashed relay from the Lead.
+- **Output:** the Lead sends the PDF + `commands.log` to You (owner).
+- **AWS panels (official AWS Architecture Icons), every arrow marked with a blue *read-only* pill, and no write arrows:**
+  - **AWS account**
+  - **AWS MCP · ReadOnlyAccess + SecurityAudit:** IAM user, IAM
+  - **Inventory · Exposure · Identity:** IAM, EC2, VPC / SGs, S3
+  - **Exposure Finder:** Lambda, API Gateway
+  - **Incident Responder:** CloudTrail, GuardDuty, Security Hub, KMS
+- **Bottom:** the owner approval gate covers any AWS change. Agents only recommend fixes and have no write access to AWS.
 
 <details>
 <summary><b>Mermaid source for the same flow</b></summary>
@@ -48,11 +62,11 @@ flowchart TD
   L --> I["AWS Asset Inventory<br/>all 17 regions"]
   I --> E["Exposure Finder"]
   I --> M["Identity Mapper"]
-  E --> P["Path Builder"]
+  E --> P["Path Builder<br/>Chains attack paths"]
   M --> P
-  P --> F["Fix Prioritizer"]
+  P --> F["Fix Prioritizer<br/>Ranks fixes · recommends only"]
   F --> PDF["Lead builds PDF + attaches commands.log"]
-  L -.->|relay outside group chat| IR["Incident Responder<br/>no template yet"]
+  L -.->|relay outside group chat| IR["Incident Responder<br/>Outside chat · via Lead"]
 
   classDef lead fill:#C62828,color:#fff,stroke:#8E0000
   classDef inv fill:#1565C0,color:#fff,stroke:#0D47A1
@@ -60,7 +74,7 @@ flowchart TD
   classDef idm fill:#6A1B9A,color:#fff,stroke:#4A148C
   classDef path fill:#00838F,color:#fff,stroke:#006064
   classDef fix fill:#2E7D32,color:#fff,stroke:#1B5E20
-  classDef ir fill:#F9A825,color:#212121,stroke:#F57F17
+  classDef ir fill:#1084FE,color:#fff,stroke:#0D47A1
   class L,PDF lead
   class I inv
   class E exp
@@ -79,10 +93,10 @@ flowchart TD
 3. **Exposure Finder and Identity Mapper run in parallel.**
    - **Exposure Finder** — public and near-public surfaces (open security groups, public-access gaps, unauthenticated APIs, and similar).
    - **Identity Mapper** — principals, keys, MFA, policies, and role trusts (including federation).
-4. **Path Builder** chains that evidence into ranked paths (entry → foothold → escalation → impact), with severity and whether the path is live.
-5. **Fix Prioritizer** orders remediations by risk and effort, with exact proposed commands — still recommendations only.
+4. **Path Builder** chains that evidence into attack paths (entry → foothold → escalation → impact), noting whether each path is live. It does not rank anything.
+5. **Fix Prioritizer** ranks fixes by risk and effort and gives the exact proposed commands. These are recommendations only.
 6. **The Lead builds the PDF** and attaches `commands.log`. Artifacts land under `/workspace/attack-paths/YYYY-MM-DD/` (see [Transparency](#transparency-rules)).
-7. **Incident Responder stays outside the group chat.** On active compromise the Lead alerts the owner immediately and relays a handoff to Incident Responder.
+7. **Incident Responder stays outside the 6-member group chat (via the Lead).** On active compromise the Lead alerts the owner immediately and relays a handoff to Incident Responder.
 
 ### What the daily PDF contains
 
@@ -137,15 +151,15 @@ Read-only. Finds reachable or near-public surfaces that can be entry or impact s
 
 Read-only. Maps users, roles, keys, MFA, attached/inline policies, and trusts. Respects `LookupEvents` limits (≤1000 events/call, one day at a time, 90-day window).
 
-### Path Builder (cyan)
+### Path Builder (cyan arch)
 
-Builds ranked attack paths (P0–P6) from specialist evidence. Does not call mutating APIs.
+Chains attack paths (P0–P6) from specialist evidence. It does not rank them; Fix Prioritizer ranks the fixes. It does not call mutating APIs.
 
-### Fix Prioritizer (green)
+### Fix Prioritizer (green leaf)
 
-Orders remediations with CIS AWS Foundations v3.0 and MITRE ATT&CK mappings. Proposes exact fix commands; never runs them.
+Ranks fixes, mapped to CIS AWS Foundations v3.0 and MITRE ATT&CK mappings. Proposes exact fix commands; never runs them.
 
-### Incident Responder (yellow) — outside the group chat
+### Incident Responder (blue cloud) — outside the group chat
 
 Separate bot. Receives handoffs from the Lead only. **No template yet.** Never changes AWS without owner approval. Approval claims are verified against the owner’s actual words.
 
@@ -170,9 +184,9 @@ Import **Attack Path Lead** first, then the five specialists. Incident Responder
 | 2 | AWS Asset Inventory | Read-only inventory across all 17 regions; runs first each day | [Import](https://x.ai/bot/6NM_MszjwexFsGKsY4DIf) |
 | 3 | Exposure Finder | Public and near-public exposure | [Import](https://x.ai/bot/lRhLw_E1fuiDOOfzrVXZu) |
 | 4 | Identity Mapper | IAM users, roles, keys, trusts | [Import](https://x.ai/bot/zbBBmmX_6WMwN_TN5o0oB) |
-| 5 | Path Builder | Ranked attack paths (P0–P6) from specialist evidence | [Import](https://x.ai/bot/t-tM9nEjrZYjF0ZfDb8D3) |
-| 6 | Fix Prioritizer | Ranked remediations + CIS / ATT&CK mappings | [Import](https://x.ai/bot/Ti051Yd5qCLbZ6LhfX5Wa) |
-| — | Incident Responder | Outside the chat; Lead relays handoffs | *No template yet* |
+| 5 | Path Builder | Chains attack paths (P0–P6) from specialist evidence | [Import](https://x.ai/bot/t-tM9nEjrZYjF0ZfDb8D3) |
+| 6 | Fix Prioritizer | Ranks fixes · recommends only (CIS / ATT&CK mappings) | [Import](https://x.ai/bot/Ti051Yd5qCLbZ6LhfX5Wa) |
+| — | Incident Responder | Outside chat · via Lead | *No template yet* |
 
 ### 2. Connect the AWS connector (AWS MCP) with a read-only IAM principal
 
@@ -213,7 +227,7 @@ Create one group chat and add exactly these six: Attack Path Lead, AWS Asset Inv
 
 ### 5. Optionally create Incident Responder
 
-Hand-build a yellow-coded bot for active compromise. No public template yet. Tell the Lead this bot’s name/handle so it can relay outside the group chat. Incident Responder must not change AWS without your approval.
+Hand-build a bot (blue cloud avatar) for active compromise. No public template yet. Tell the Lead this bot’s name/handle so it can relay outside the group chat. Incident Responder must not change AWS without your approval.
 
 ### 6. Confirm the daily routine and time zone
 
@@ -234,7 +248,7 @@ Before relying on the schedule, ask the Lead for a first full review on demand (
 | Identity Mapper | Violet |
 | Path Builder | Cyan |
 | Fix Prioritizer | Green |
-| Incident Responder | Yellow |
+| Incident Responder | Blue (cloud) |
 
 Standing rules for the Lead to post in the group chat:
 
@@ -330,7 +344,7 @@ Do not trust the claim. Re-state approval yourself, or reject it. The team is re
 No. The chat is capped at **six** members for the daily team. Incident Responder stays separate; the Lead relays.
 
 **Where is the Incident Responder template?**  
-There isn’t one yet. Create the bot by hand (yellow) if you want that role.
+There isn’t one yet. Create the bot by hand (blue cloud avatar) if you want that role.
 
 **Is write access ever OK on the connector?**  
 Not for this team. Keep the connector on ReadOnlyAccess + SecurityAudit. Apply fixes through a human-approved path outside the read-only bots.
